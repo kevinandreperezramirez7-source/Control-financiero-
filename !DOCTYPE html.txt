@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mis Finanzas</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f3f4f6;color:#1f2937}
+.container{max-width:1100px;margin:auto;padding:20px}
+.login{background:#fff;padding:25px;border-radius:15px;max-width:450px;margin:50px auto;box-shadow:0 5px 20px rgba(0,0,0,.1)}
+.login h1{text-align:center;margin-bottom:20px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;margin-bottom:5px;font-weight:bold}
+input,select,button{width:100%;padding:12px;border-radius:8px;border:1px solid #d1d5db;font-size:15px}
+button{background:#4f46e5;color:#fff;border:none;cursor:pointer;font-weight:bold}
+button:hover{opacity:.9}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}
+.btn-secondary{background:#6b7280;margin-top:10px}
+.hidden{display:none}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:20px}
+.topbar button{width:auto;padding:10px 15px}
+.month-panel,.form-movimiento{background:#fff;padding:20px;border-radius:15px;margin-bottom:20px}
+.month-controls{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}
+.month-controls input{flex:1;min-width:150px}
+.month-controls button{width:auto}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:20px}
+.card{background:#fff;padding:20px;border-radius:15px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.card p{color:#6b7280;font-size:14px}
+.card h2{margin-top:8px}
+.income{color:#16a34a}.expense{color:#dc2626}.balance{color:#4f46e5}
+.form-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;margin-top:15px}
+.form-row button{width:auto}
+.table-container{background:#fff;border-radius:15px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:14px;border-bottom:1px solid #e5e7eb;text-align:left}
+th{background:#f9fafb}
+.delete{background:#dc2626;width:auto;padding:7px 12px}
+.empty{padding:30px;text-align:center;color:#6b7280}
+.mes-item{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #e5e7eb}
+.mes-item button{width:auto}
+#configError{background:#fef2f2;color:#991b1b;padding:15px;border-radius:10px;margin-bottom:15px;line-height:1.4}
+@media(max-width:700px){
+.container{padding:12px}
+.topbar{align-items:flex-start;flex-direction:column}
+.topbar button{width:100%}
+.cards,.form-row{grid-template-columns:1fr}
+.form-row button,.month-controls button{width:100%}
+.month-controls{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login">
+  <h1>💰 Mis Finanzas</h1>
+  <div id="configError" class="hidden"></div>
+  <p style="text-align:center;margin-bottom:20px">Inicia sesión para guardar tus datos en la nube.</p>
+  <div class="form-group"><label for="email">Correo</label>
+    <input type="email" id="email" placeholder="correo@ejemplo.com" autocomplete="email"></div>
+  <div class="form-group"><label for="password">Contraseña</label>
+    <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password"></div>
+  <button onclick="iniciarSesion()">Iniciar sesión</button>
+  <button class="btn-secondary" onclick="registrarse()">Crear cuenta</button>
+  <p id="loginMessage" style="margin-top:15px;text-align:center"></p>
+</div>
+
+<div id="app" class="hidden">
+<div class="container">
+  <div class="topbar">
+    <div><h1>💰 Mis Finanzas</h1><p id="usuario"></p></div>
+    <button onclick="cerrarSesion()">Cerrar sesión</button>
+  </div>
+
+  <div class="month-panel">
+    <h2>📖 Mis meses</h2>
+    <p style="margin-top:8px;color:#6b7280">Crea manualmente los meses y escribe el año que quieras.</p>
+    <div class="month-controls">
+      <input type="text" id="nombreMes" placeholder="Ejemplo: Enero">
+      <input type="number" id="anioMes" placeholder="Ejemplo: 2027" min="2000" max="2100">
+      <button onclick="crearMes()">+ Crear mes</button>
+    </div>
+    <select id="mesSeleccionado" onchange="cargarMes()">
+      <option value="">Selecciona un mes</option>
+    </select>
+    <div id="listaMeses" style="margin-top:15px"></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><p>Ingresos del mes</p><h2 id="totalIngresos" class="income">Q 0.00</h2></div>
+    <div class="card"><p>Egresos del mes</p><h2 id="totalEgresos" class="expense">Q 0.00</h2></div>
+    <div class="card"><p>Saldo del mes</p><h2 id="saldo" class="balance">Q 0.00</h2></div>
+  </div>
+
+  <div class="form-movimiento">
+    <h2>➕ Agregar movimiento</h2>
+    <div class="form-row">
+      <input type="text" id="descripcion" placeholder="Descripción">
+      <input type="number" id="monto" placeholder="Monto Q" step="0.01" min="0">
+      <select id="tipo">
+        <option value="ingreso">Ingreso</option>
+        <option value="egreso">Egreso</option>
+      </select>
+      <button onclick="agregarMovimiento()">Agregar</button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Monto</th><th>Acción</th></tr></thead>
+      <tbody id="tablaMovimientos"></tbody>
+    </table>
+    <div id="sinMovimientos" class="empty">Selecciona un mes para comenzar.</div>
+  </div>
+</div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ifsphpzvjzoktibazkmi.supabase.co";
+const SUPABASE_KEY = "sb_publishable_7KraiaSY-0cQ7OoMFQruMA_6-73sHeh";
+
+const $ = id => document.getElementById(id);
+let sb = null, usuarioActual = null, meses = [], movimientos = [];
+
+const configurado = /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL.trim()) &&
+                    SUPABASE_KEY.trim() && !SUPABASE_KEY.includes("PON_AQUI");
+
+if (configurado) {
+  sb = supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
+} else {
+  const e = $("configError");
+  e.classList.remove("hidden");
+  e.innerHTML = "⚠️ Falta configurar Supabase. Revisa la URL y la clave en el código.";
+}
+
+function dinero(n){
+  return new Intl.NumberFormat("es-GT",{style:"currency",currency:"GTQ"}).format(n);
+}
+
+function hoyLocal(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function mostrarMensaje(texto,color){
+  $("loginMessage").textContent = texto;
+  $("loginMessage").style.color = color;
+}
+
+function listo(){
+  if (!sb) { mostrarMensaje("Primero configura la URL y la clave de Supabase en el código.","red"); return false; }
+  return true;
+}
+
+async function registrarse(){
+  if(!listo()) return;
+  const email = $("email").value.trim(), password = $("password").value;
+  if(!email || !password) return mostrarMensaje("Escribe tu correo y contraseña.","red");
+  if(password.length < 6) return mostrarMensaje("La contraseña debe tener mínimo 6 caracteres.","red");
+  const {data,error} = await sb.auth.signUp({email,password});
+  if(error) return mostrarMensaje(error.message,"red");
+  if(data.session){ usuarioActual = data.user; return mostrarAplicacion(); }
+  mostrarMensaje("Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.","green");
+}
+
+async function iniciarSesion(){
+  if(!listo()) return;
+  const email = $("email").value.trim(), password = $("password").value;
+  if(!email || !password) return mostrarMensaje("Completa todos los campos.","red");
+  const {data,error} = await sb.auth.signInWithPassword({email,password});
+  if(error){
+    const msg = /confirm/i.test(error.message) ? "Debes confirmar tu correo antes de entrar." : "Correo o contraseña incorrectos.";
+    return mostrarMensaje(msg,"red");
+  }
+  usuarioActual = data.user;
+  mostrarAplicacion();
+}
+
+["email","password"].forEach(id => $(id).addEventListener("keydown", e => { if(e.key==="Enter") iniciarSesion(); }));
+
+async function mostrarAplicacion(){
+  $("loginScreen").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  $("usuario").textContent = "Usuario: " + usuarioActual.email;
+  await cargarMeses();
+}
+
+async function cerrarSesion(){
+  await sb.auth.signOut();
+  usuarioActual = null; meses = []; movimientos = [];
+  $("app").classList.add("hidden");
+  $("loginScreen").classList.remove("hidden");
+  mostrarMensaje("","");
+  limpiarTabla();
+}
+
+async function cargarMeses(){
+  const {data,error} = await sb.from("meses").select("*")
+    .eq("user_id",usuarioActual.id)
+    .order("anio",{ascending:false}).order("mes",{ascending:false});
+  if(error) return alert("Error cargando los meses: " + error.message);
+  meses = data || [];
+  const actual = $("mesSeleccionado").value;
+  const sel = $("mesSeleccionado");
+  sel.innerHTML = '<option value="">Selecciona un mes</option>';
+  meses.forEach(m => {
+    const o = document.createElement("option");
+    o.value = m.id; o.textContent = m.nombre + " " + m.anio;
+    sel.appendChild(o);
+  });
+  if(meses.some(m => String(m.id) === actual)) sel.value = actual;
+  mostrarListaMeses();
+}
+
+function mostrarListaMeses(){
+  const c = $("listaMeses");
+  c.innerHTML = "";
+  meses.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "mes-item";
+    const t = document.createElement("span");
+    t.textContent = "📅 " + m.nombre + " " + m.anio;
+    const b = document.createElement("button");
+    b.textContent = "Eliminar"; b.className = "delete";
+    b.onclick = () => eliminarMes(m.id);
+    div.append(t,b);
+    c.appendChild(div);
+  });
+}
+
+const NUM_MES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+const capitalizar = t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+
+async function crearMes(){
+  const nombre = $("nombreMes").value.trim();
+  const anio = parseInt($("anioMes").value);
+  if(!nombre) return alert("Escribe el nombre del mes.");
+  if(!anio || anio < 2000 || anio > 2100) return alert("Escribe un año válido.");
+  const numero = NUM_MES[nombre.toLowerCase()];
+  if(!numero) return alert("Escribe un mes válido. Ejemplo: Enero.");
+  if(meses.some(m => m.mes === numero && m.anio === anio)) return alert("Este mes ya existe.");
+  const {data,error} = await sb.from("meses")
+    .insert({user_id:usuarioActual.id, nombre:capitalizar(nombre), mes:numero, anio})
+    .select().single();
+  if(error) return alert("Error creando el mes: " + error.message);
+  $("nombreMes").value = ""; $("anioMes").value = "";
+  await cargarMeses();
+  $("mesSeleccionado").value = data.id;
+  await cargarMes();
+}
+
+async function eliminarMes(id){
+  if(!confirm("¿Seguro que quieres eliminar este mes y todos sus movimientos?")) return;
+  const {error} = await sb.from("meses").delete().eq("id",id);
+  if(error) return alert("Error eliminando el mes: " + error.message);
+  if($("mesSeleccionado").value === String(id)){ $("mesSeleccionado").value = ""; movimientos = []; limpiarTabla(); }
+  await cargarMeses();
+}
+
+async function cargarMes(){
+  const mesId = $("mesSeleccionado").value;
+  if(!mesId){ movimientos = []; return limpiarTabla(); }
+  const {data,error} = await sb.from("movimientos").select("*")
+    .eq("mes_id",mesId).eq("user_id",usuarioActual.id)
+    .order("fecha",{ascending:false}).order("creado_en",{ascending:false});
+  if(error) return alert("Error cargando movimientos: " + error.message);
+  movimientos = data || [];
+  mostrarMovimientos();
+}
+
+async function agregarMovimiento(){
+  const mesId = $("mesSeleccionado").value;
+  if(!mesId) return alert("Primero selecciona un mes.");
+  const descripcion = $("descripcion").value.trim();
+  const monto = parseFloat($("monto").value);
+  const tipo = $("tipo").value;
+  if(!descripcion) return alert("Escribe una descripción.");
+  if(!monto || monto <= 0) return alert("Escribe un monto válido.");
+  const {error} = await sb.from("movimientos")
+    .insert({user_id:usuarioActual.id, mes_id:mesId, fecha:hoyLocal(), descripcion, tipo, monto});
+  if(error) return alert("Error guardando movimiento: " + error.message);
+  $("descripcion").value = ""; $("monto").value = "";
+  await cargarMes();
+}
+
+function mostrarMovimientos(){
+  const tabla = $("tablaMovimientos");
+  tabla.innerHTML = "";
+  if(movimientos.length === 0){
+    $("sinMovimientos").textContent = "No hay movimientos en este mes.";
+    $("sinMovimientos").style.display = "block";
+    return actualizarTotales();
+  }
+  $("sinMovimientos").style.display = "none";
+  movimientos.forEach(m => {
+    const tr = document.createElement("tr");
+    const celdas = [m.fecha, m.descripcion, m.tipo === "ingreso" ? "Ingreso" : "Egreso", dinero(m.monto)];
+    celdas.forEach(txt => { const td = document.createElement("td"); td.textContent = txt; tr.appendChild(td); });
+    const td = document.createElement("td");
+    const b = document.createElement("button");
+    b.textContent = "Eliminar"; b.className = "delete";
+    b.onclick = () => eliminarMovimiento(m.id);
+    td.appendChild(b); tr.appendChild(td);
+    tabla.appendChild(tr);
+  });
+  actualizarTotales();
+}
+
+function actualizarTotales(){
+  let ing = 0, egr = 0;
+  movimientos.forEach(m => { if(m.tipo === "ingreso") ing += Number(m.monto); else egr += Number(m.monto); });
+  $("totalIngresos").textContent = dinero(ing);
+  $("totalEgresos").textContent = dinero(egr);
+  $("saldo").textContent = dinero(ing - egr);
+}
+
+async function eliminarMovimiento(id){
+  if(!confirm("¿Quieres eliminar este movimiento?")) return;
+  const {error} = await sb.from("movimientos").delete().eq("id",id);
+  if(error) return alert("Error eliminando el movimiento: " + error.message);
+  await cargarMes();
+}
+
+function limpiarTabla(){
+  $("tablaMovimientos").innerHTML = "";
+  $("sinMovimientos").textContent = "Selecciona un mes para comenzar.";
+  $("sinMovimientos").style.display = "block";
+  ["totalIngresos","totalEgresos","saldo"].forEach(id => $(id).textContent = "Q 0.00");
+}
+
+async function comprobarSesion(){
+  if(!sb) return;
+  const {data} = await sb.auth.getSession();
+  if(data.session){ usuarioActual = data.session.user; mostrarAplicacion(); }
+}
+comprobarSesion();
+</script>
+</body>
+</html>
